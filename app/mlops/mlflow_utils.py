@@ -89,6 +89,7 @@ def log_training_run(
             }
         )
 
+        # Nested runs per candidate — log both regression + classification metrics
         for model_name, metrics in results.items():
             with mlflow.start_run(run_name=model_name, nested=True):
                 mlflow.set_tag("model_family", model_name)
@@ -98,14 +99,24 @@ def log_training_run(
                         "rmse": float(metrics.get("RMSE", 0.0)),
                         "mae": float(metrics.get("MAE", 0.0)),
                         "r2": float(metrics.get("R2", 0.0)),
+                        "accuracy": float(metrics.get("Accuracy", 0.0)),
+                        "precision": float(metrics.get("Precision", 0.0)),
+                        "recall": float(metrics.get("Recall", 0.0)),
+                        "f1": float(metrics.get("F1", 0.0)),
                     }
                 )
 
+        # Top-level best metrics
         mlflow.log_params({f"best_{k}": v for k, v in best_params.items()})
         mlflow.log_metric("best_rmse", float(results[best_name].get("RMSE", 0.0)))
         mlflow.log_metric("best_mae", float(results[best_name].get("MAE", 0.0)))
         mlflow.log_metric("best_r2", float(results[best_name].get("R2", 0.0)))
+        mlflow.log_metric("best_accuracy", float(results[best_name].get("Accuracy", 0.0)))
+        mlflow.log_metric("best_precision", float(results[best_name].get("Precision", 0.0)))
+        mlflow.log_metric("best_recall", float(results[best_name].get("Recall", 0.0)))
+        mlflow.log_metric("best_f1", float(results[best_name].get("F1", 0.0)))
 
+        # Log model artifact + register
         try:
             signature = infer_signature(X_train, best_model.predict(X_train))
             mlflow.sklearn.log_model(

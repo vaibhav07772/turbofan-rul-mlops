@@ -1,17 +1,28 @@
-"""Training loop: evaluate 3 models, pick best by RMSE, log to MLflow."""
+"""Training loop: evaluate 3 regression models + 3-class classification metrics."""
 
 from __future__ import annotations
 
 import time
 
 import numpy as np
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    confusion_matrix,
+    f1_score,
+    mean_absolute_error,
+    mean_squared_error,
+    precision_score,
+    r2_score,
+    recall_score,
+)
 
 from app.mlops.mlflow_utils import is_enabled, log_training_run
+from app.pipeline.classification import CLASSES, ruls_to_classes
 from app.pipeline.models import MODEL_CANDIDATES, build_model
 
 
-def evaluate(y_true, y_pred) -> dict:
+def evaluate_regression(y_true, y_pred) -> dict:
     rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
     mae = float(mean_absolute_error(y_true, y_pred))
     r2 = float(r2_score(y_true, y_pred))
@@ -22,34 +33,71 @@ def evaluate(y_true, y_pred) -> dict:
     }
 
 
-def train_all_models(
-    X_train,
-    y_train,
-    X_val,
-    y_val,
-    *,
-    dataset_key: str = "turbofan-fd001",
-):
-    """Train all candidate models, evaluate, select best, log to MLflow."""
+def evaluate_classification(y_true_rul, y_pred_rul) -> dict:
+    """Treat RUL predictions as 3-class classification problem."""
+    y_true_cls = ruls_to_classes(y_true_rul)
+    y_pred_cls = ruls_to_classes(y_pred_rul)
+
+    # Per-class metrics (macro average)
+    precision = float(precision_score(y_true_cls, y_pred_cls, average="macro", zero_division=0))
+    recall = float(recall_score(y_true_cls, y_pred_cls, average="macro", zero_division=0))
+    f1 = float(f1_score(y_true_cls, y_pred_cls, average="macro", zero_division=0))
+    accuracy = float(accuracy_score(y_true_cls, y_pred_cls))
+
+    # Confusion matrix
+    cm = confusion_matrix(y_true_cls, y_pred_cls, labels=CLASSES).tolist()
+
+    # Per-class breakdown
+    report = classification_report(
+        y_true_cls, y_pred_cls, labels=CLASSES, output_dict=True, zero_division=0
+    )
+
+    return {
+        "Accuracy": round(accuracy * 100, 2),
+        "Precision": round(precision * 100, 2),
+        "Recall": round(recall * 100, 2),
+        "F1": round(f1 * 100, 2),
+        "ConfusionMatrix": cm,
+        "ClassReport": report,
+        "Classes": CLASSES,
+    }
+
+
+def train_all_models(X_train, y_train, X_val, y_val, *, dataset_key: str = "turbofan-fd001"):
+    """Train all candidate models, evaluate regression + classification, pick best."""
     started = time.perf_counter()
     results: dict[str, dict] = {}
     fitted_models: dict[str, object] = {}
 
+    print("\n[REGRESSION + CLASSIFICATION METRICS]")
+    print("-" * 90)
     for model_name, candidates in MODEL_CANDIDATES.items():
         params = candidates[0]
         model = build_model(model_name, params)
         model.fit(X_train, y_train)
         pred = model.predict(X_val)
-        metrics = evaluate(y_val, pred)
-        metrics["params"] = params
-        results[model_name] = metrics
+
+        reg_metrics = evaluate_regression(y_val, pred)
+        cls_metrics = evaluate_classification(y_val, pred)
+
+        results[model_name] = {
+            **reg_metrics,
+            "Accuracy": cls_metrics["Accuracy"],
+            "Precision": cls_metrics["Precision"],
+            "Recall": cls_metrics["Recall"],
+            "F1": cls_metrics["F1"],
+            "params": params,
+        }
         fitted_models[model_name] = model
+
         print(
-            f"[TRAIN] {model_name:20s} "
-            f"RMSE={metrics['RMSE']:.3f}  "
-            f"MAE={metrics['MAE']:.3f}  "
-            f"R2={metrics['R2']:.4f}"
+            f"  {model_name:20s} "
+            f"RMSE={reg_metrics['RMSE']:>7.3f}  "
+            f"R2={reg_metrics['R2']:>7.4f}  "
+            f"Acc={cls_metrics['Accuracy']:>6.2f}%  "
+            f"F1={cls_metrics['F1']:>6.2f}%"
         )
+    print("-" * 90)
 
     best_name = min(results, key=lambda k: results[k]["RMSE"])
     best_model = fitted_models[best_name]
@@ -59,6 +107,8 @@ def train_all_models(
     print(
         f"\n[TRAIN] best={best_name} "
         f"RMSE={results[best_name]['RMSE']} | "
+        f"Accuracy={results[best_name]['Accuracy']}% | "
+        f"F1={results[best_name]['F1']}% | "
         f"total={elapsed:.1f}s"
     )
 

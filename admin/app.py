@@ -71,6 +71,10 @@ def load_runs(limit: int = 100) -> pd.DataFrame:
             "rmse": r.data.metrics.get("best_rmse"),
             "mae": r.data.metrics.get("best_mae"),
             "r2": r.data.metrics.get("best_r2"),
+            "accuracy": r.data.metrics.get("best_accuracy"),
+            "precision": r.data.metrics.get("best_precision"),
+            "recall": r.data.metrics.get("best_recall"),
+            "f1": r.data.metrics.get("best_f1"),
             "start_time": pd.to_datetime(start, unit="ms") if start else None,
             "duration_s": round((end - start) / 1000, 2) if (start and end) else None,
         })
@@ -210,6 +214,10 @@ if page == "Overview":
             st.markdown(f"**RMSE:** {latest['rmse']}")
             st.markdown(f"**MAE:** {latest['mae']}")
             st.markdown(f"**R²:** {latest['r2']}")
+            if latest.get("accuracy") is not None:
+                st.markdown(f"**Accuracy:** {latest['accuracy']}%")
+            if latest.get("f1") is not None:
+                st.markdown(f"**F1 Score:** {latest['f1']}%")
             st.markdown(f"**Duration:** {latest['duration_s']}s")
             st.markdown(f"**Train / Val:** {latest['n_train']} / {latest['n_val']}")
             st.markdown(f"**Features:** {latest['n_features']}")
@@ -234,6 +242,7 @@ elif page == "Experiments":
     if runs_df.empty:
         st.info("No runs yet.")
     else:
+        # Regression metrics
         chart_df = runs_df.dropna(subset=["rmse"])
         if not chart_df.empty:
             fig = px.bar(
@@ -246,13 +255,33 @@ elif page == "Experiments":
             )
             st.plotly_chart(fig, use_container_width=True)
 
+        # Classification metrics
+        if runs_df["accuracy"].notna().any():
+            st.subheader("Classification metrics (3-class health)")
+            cls_df = runs_df.dropna(subset=["accuracy"])
+            fig = px.bar(
+                cls_df,
+                x="name",
+                y=["accuracy", "precision", "recall", "f1"],
+                barmode="group",
+                title="Classification metrics across runs",
+                labels={"value": "Score (%)", "name": "Run name", "variable": "Metric"},
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
         st.subheader("All runs")
-        display = runs_df[[
+        display_cols = [
             "name", "best_model", "status",
             "rmse", "mae", "r2",
+            "accuracy", "f1",
             "duration_s", "start_time",
-        ]].copy()
-        st.dataframe(display, use_container_width=True, hide_index=True)
+        ]
+        display_cols = [c for c in display_cols if c in runs_df.columns]
+        st.dataframe(
+            runs_df[display_cols].copy(),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 elif page == "Predictions":
@@ -302,10 +331,36 @@ elif page == "Predictions":
 elif page == "Model Health":
     st.title("🏥 Model Health")
 
-    if preds_df.empty:
-        st.info("No predictions yet.")
+    # --- Section 1: Classification Metrics from latest run ---
+    st.subheader("Classification Metrics (RUL → Health Class)")
+    st.caption("Classes: HEALTHY (RUL > 50), WARNING (20-50), CRITICAL (< 20)")
+
+    if not runs_df.empty:
+        latest = runs_df.iloc[0]
+        c1, c2, c3, c4 = st.columns(4)
+
+        acc = latest.get("accuracy")
+        prec = latest.get("precision")
+        rec = latest.get("recall")
+        f1 = latest.get("f1")
+
+        c1.metric("Accuracy", f"{acc:.2f}%" if acc is not None else "—")
+        c2.metric("Precision", f"{prec:.2f}%" if prec is not None else "—")
+        c3.metric("Recall", f"{rec:.2f}%" if rec is not None else "—")
+        c4.metric("F1 Score", f"{f1:.2f}%" if f1 is not None else "—")
+
+        # Show best model info
+        st.caption(f"From run: `{latest['name']}` · Best model: `{latest['best_model']}`")
     else:
-        st.subheader("Status distribution")
+        st.info("Train a model first to see classification metrics.")
+
+    st.divider()
+
+    # --- Section 2: Live prediction status distribution ---
+    if preds_df.empty:
+        st.info("No live predictions yet. Hit `/api/predict/upload`.")
+    else:
+        st.subheader("Live Prediction Status Distribution")
         if "status" in preds_df.columns:
             status_counts = preds_df["status"].value_counts().reset_index()
             status_counts.columns = ["status", "count"]
@@ -332,6 +387,8 @@ elif page == "Model Health":
                 title="Predicted RUL distribution",
                 labels={"predicted_rul": "Predicted RUL (cycles)"},
             )
+            fig.add_vline(x=20, line_dash="dash", line_color="red", annotation_text="CRITICAL")
+            fig.add_vline(x=50, line_dash="dash", line_color="orange", annotation_text="WARNING")
             st.plotly_chart(fig, use_container_width=True)
 
             stats = preds_df["predicted_rul"].describe()
