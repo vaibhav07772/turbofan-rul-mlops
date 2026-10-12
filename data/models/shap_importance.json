@@ -1,0 +1,86 @@
+{
+  "top_features": [
+    {
+      "feature": "sensor_4_roll_mean_5",
+      "importance": 4.4115
+    },
+    {
+      "feature": "sensor_11_roll_mean_5",
+      "importance": 4.0001
+    },
+    {
+      "feature": "sensor_15_roll_mean_10",
+      "importance": 3.6363
+    },
+    {
+      "feature": "sensor_2_roll_mean_10",
+      "importance": 3.3051
+    },
+    {
+      "feature": "sensor_9_roll_mean_5",
+      "importance": 2.9828
+    },
+    {
+      "feature": "sensor_4_roll_mean_10",
+      "importance": 2.6675
+    },
+    {
+      "feature": "sensor_3_roll_mean_10",
+      "importance": 2.3671
+    },
+    {
+      "feature": "sensor_14_roll_mean_10",
+      "importance": 2.338
+    },
+    {
+      "feature": "sensor_15_roll_mean_5",
+      "importance": 2.206
+    },
+    {
+      "feature": "sensor_9_roll_mean_10",
+      "importance": 2.1472
+    },
+    {
+      "feature": "sensor_3_roll_mean_5",
+      "importance": 1.5405
+    },
+    {
+      "feature": "sensor_2_roll_mean_5",
+      "importance": 1.4267
+    },
+    {
+      "feature": "sensor_20_roll_mean_10",
+      "importance": 1.0216
+    },
+    {
+      "feature": "sensor_20_roll_mean_5",
+      "importance": 1.008
+    },
+    {
+      "feature": "sensor_21_roll_mean_5",
+      "importance": 0.9215
+    },
+    {
+      "feature": "sensor_11_roll_mean_10",
+      "importance": 0.854
+    },
+    {
+      "feature": "sensor_21_roll_mean_10",
+      "importance": 0.7614
+    },
+    {
+      "feature": "sensor_9_roll_std_10",
+      "importance": 0.7605
+    },
+    {
+      "feature": "sensor_7_roll_mean_5",
+      "importance": 0.7202
+    },
+    {
+      "feature": "sensor_13_roll_mean_5",
+      "importance": 0.7175
+    }
+  ],
+  "n_features": 123,
+  "n_samples_explained": 100
+}

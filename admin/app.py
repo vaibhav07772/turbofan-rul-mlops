@@ -9,7 +9,11 @@ Usage:
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+# Ensure project root is importable when streamlit runs from admin/
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import mlflow
 import pandas as pd
@@ -23,6 +27,7 @@ MLFLOW_DB = ROOT / "mlflow.db"
 MLFLOW_URI = f"sqlite:///{MLFLOW_DB.as_posix()}"
 PRED_LOG = ROOT / "data" / "logs" / "predictions.jsonl"
 MODEL_DIR = ROOT / "data" / "models"
+SHAP_PATH = MODEL_DIR / "shap_importance.json"
 EXPERIMENT = "turbofan-rul"
 REGISTERED_MODEL = "turbofan-rul-model"
 
@@ -144,6 +149,18 @@ def model_info() -> dict:
     return info
 
 
+@st.cache_data(ttl=30)
+def load_shap() -> dict | None:
+    """Load saved SHAP report by reading JSON directly (no app import needed)."""
+    if not SHAP_PATH.exists():
+        return None
+    try:
+        with SHAP_PATH.open(encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
 # --- Sidebar ---
 with st.sidebar:
     st.title("✈️ Turbofan RUL Admin")
@@ -152,7 +169,7 @@ with st.sidebar:
 
     page = st.radio(
         "Navigate",
-        ["Overview", "Experiments", "Predictions", "Model Health"],
+        ["Overview", "Experiments", "Predictions", "Model Health", "Explainability"],
         label_visibility="collapsed",
     )
 
@@ -171,12 +188,14 @@ try:
     registry_df = load_registry()
     preds_df = load_predictions()
     info = model_info()
+    shap_data = load_shap()
     load_error = None
 except Exception as exc:
     runs_df = pd.DataFrame()
     registry_df = pd.DataFrame()
     preds_df = pd.DataFrame()
     info = {}
+    shap_data = None
     load_error = f"{type(exc).__name__}: {exc}"
 
 if load_error:
@@ -242,7 +261,6 @@ elif page == "Experiments":
     if runs_df.empty:
         st.info("No runs yet.")
     else:
-        # Regression metrics
         chart_df = runs_df.dropna(subset=["rmse"])
         if not chart_df.empty:
             fig = px.bar(
@@ -255,7 +273,6 @@ elif page == "Experiments":
             )
             st.plotly_chart(fig, use_container_width=True)
 
-        # Classification metrics
         if runs_df["accuracy"].notna().any():
             st.subheader("Classification metrics (3-class health)")
             cls_df = runs_df.dropna(subset=["accuracy"])
@@ -331,7 +348,6 @@ elif page == "Predictions":
 elif page == "Model Health":
     st.title("🏥 Model Health")
 
-    # --- Section 1: Classification Metrics from latest run ---
     st.subheader("Classification Metrics (RUL → Health Class)")
     st.caption("Classes: HEALTHY (RUL > 50), WARNING (20-50), CRITICAL (< 20)")
 
@@ -349,14 +365,12 @@ elif page == "Model Health":
         c3.metric("Recall", f"{rec:.2f}%" if rec is not None else "—")
         c4.metric("F1 Score", f"{f1:.2f}%" if f1 is not None else "—")
 
-        # Show best model info
         st.caption(f"From run: `{latest['name']}` · Best model: `{latest['best_model']}`")
     else:
         st.info("Train a model first to see classification metrics.")
 
     st.divider()
 
-    # --- Section 2: Live prediction status distribution ---
     if preds_df.empty:
         st.info("No live predictions yet. Hit `/api/predict/upload`.")
     else:
@@ -398,6 +412,49 @@ elif page == "Model Health":
             c2.metric("Median RUL", f"{stats['50%']:.1f}")
             c3.metric("Min RUL", f"{stats['min']:.1f}")
             c4.metric("Max RUL", f"{stats['max']:.1f}")
+
+
+elif page == "Explainability":
+    st.title("🔍 Model Explainability (SHAP)")
+
+    if shap_data is None:
+        st.warning("No SHAP report found.")
+        st.info("Run: `python scripts/compute_shap.py` to generate it.")
+    else:
+        st.caption(
+            f"SHAP analysis of the winning model across "
+            f"{shap_data.get('n_samples_explained', 0)} validation samples."
+        )
+
+        top_features = shap_data.get("top_features", [])
+        if top_features:
+            df_shap = pd.DataFrame(top_features)
+
+            fig = px.bar(
+                df_shap,
+                x="importance",
+                y="feature",
+                orientation="h",
+                title=f"Top {len(df_shap)} Most Important Features (mean |SHAP|)",
+                labels={"importance": "Mean |SHAP| value", "feature": "Feature"},
+            )
+            fig.update_layout(yaxis=dict(autorange="reversed"), height=600)
+            st.plotly_chart(fig, use_container_width=True)
+
+            with st.expander("View as table"):
+                st.dataframe(df_shap, use_container_width=True, hide_index=True)
+
+            st.subheader("🔎 Key Insights")
+            top3 = df_shap.head(3)["feature"].tolist()
+            st.markdown(
+                f"**Top 3 most influential features:** `{top3[0]}`, `{top3[1]}`, `{top3[2]}`"
+            )
+            st.markdown(
+                "These features have the largest impact on RUL predictions. "
+                "Rolling mean features capture gradual sensor degradation over time."
+            )
+        else:
+            st.info("SHAP report is empty.")
 
 
 st.sidebar.divider()
