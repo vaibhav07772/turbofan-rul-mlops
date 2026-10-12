@@ -1,0 +1,45 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# === Virtual environments ===
+.venv/
+venv/
+env/
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# === Environment ===
+.env
+.env.local
+
+# === Testing caches ===
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# === Logs ===
+*.log
+
+# === Model cache ===
+data/models/*.pkl
+
+# === MLflow ===
+mlruns/
+mlartifacts/
+
+# === Data (large files via DVC) ===
+data/raw/*.txt
+data/raw/*.zip
+data/processed/*.csv
