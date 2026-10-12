@@ -1,0 +1,5 @@
+outs:
+- md5: 259f340bac32ce6fa8894815600fa757
+  size: 3515356
+  hash: md5
+  path: train_FD001.txt

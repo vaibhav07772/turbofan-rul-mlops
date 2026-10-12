@@ -1,0 +1,23 @@
+schema: '2.0'
+stages:
+  train:
+    cmd: python scripts/train.py
+    deps:
+    - path: app/pipeline
+      hash: md5
+      md5: ab9fb1ad72f0fff248cd91135ab0b08e.dir
+      size: 46618
+      nfiles: 17
+    - path: data/raw/train_FD001.txt
+      hash: md5
+      md5: 259f340bac32ce6fa8894815600fa757
+      size: 3515356
+    outs:
+    - path: data/models/feature_columns.pkl
+      hash: md5
+      md5: 3fa6d3d5d90eb88ecb7b499df2d86cc6
+      size: 2420
+    - path: data/models/model.pkl
+      hash: md5
+      md5: 4773901487ed5393f0862a47becb7454
+      size: 925292

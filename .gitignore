@@ -43,3 +43,13 @@ mlartifacts/
 data/raw/*.txt
 data/raw/*.zip
 data/processed/*.csv
+
+# DVC
+.dvc/tmp/
+.dvc/cache/
+*.tmp.dvc
+
+# NASA raw data (tracked by DVC)
+data/raw/*.txt
+data/raw/*.zip
+!data/raw/.gitkeep

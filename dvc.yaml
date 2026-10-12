@@ -1,0 +1,9 @@
+stages:
+  train:
+    cmd: python scripts/train.py
+    deps:
+      - data/raw/train_FD001.txt
+      - app/pipeline
+    outs:
+      - data/models/model.pkl
+      - data/models/feature_columns.pkl
