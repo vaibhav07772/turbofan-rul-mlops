@@ -1,0 +1,1 @@
+{"timestamp": "2026-10-12T18:51:57.804958+00:00", "endpoint": "upload", "unit_id": 99, "n_cycles": 30, "predicted_rul": 46.91, "status": "WARNING", "model": "GradientBoostingRegressor", "duration_ms": 287.0}
