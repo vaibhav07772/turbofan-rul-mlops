@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.config import get_settings
@@ -34,7 +34,7 @@ def log_prediction(record: dict) -> None:
     """Append one prediction record to the prediction log."""
     try:
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             **record,
         }
         line = json.dumps(payload, default=str) + "\n"

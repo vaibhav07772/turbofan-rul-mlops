@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.pipeline.schema import OP_SETTING_COLS, SENSOR_COLS
-
-
 # Sensors that are flat (constant) in FD001 — drop them.
 # Source: NASA C-MAPSS documentation + community analysis.
 CONSTANT_SENSORS_FD001 = {
@@ -19,9 +16,7 @@ CONSTANT_SENSORS_FD001 = {
 }
 
 
-def drop_constant_sensors(
-    df: pd.DataFrame, to_drop: set[str] | None = None
-) -> pd.DataFrame:
+def drop_constant_sensors(df: pd.DataFrame, to_drop: set[str] | None = None) -> pd.DataFrame:
     """Drop sensor columns that carry no signal (flat in FD001)."""
     if to_drop is None:
         to_drop = CONSTANT_SENSORS_FD001
@@ -32,11 +27,7 @@ def drop_constant_sensors(
 def get_feature_columns(df: pd.DataFrame) -> list[str]:
     """Return numeric feature columns (excludes unit, cycle, RUL)."""
     excluded = {"unit", "cycle", "RUL"}
-    return [
-        c
-        for c in df.columns
-        if c not in excluded and pd.api.types.is_numeric_dtype(df[c])
-    ]
+    return [c for c in df.columns if c not in excluded and pd.api.types.is_numeric_dtype(df[c])]
 
 
 def train_val_split_by_engine(

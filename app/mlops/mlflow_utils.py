@@ -79,23 +79,27 @@ def log_training_run(
 
     with mlflow.start_run(run_name=f"training-{best_name}") as parent:
         mlflow.set_tags(parent_tags)
-        mlflow.log_params({
-            "n_train": n_train,
-            "n_val": n_val,
-            "n_features": n_features,
-            "candidate_models": ",".join(results.keys()),
-            "best_model": best_name,
-        })
+        mlflow.log_params(
+            {
+                "n_train": n_train,
+                "n_val": n_val,
+                "n_features": n_features,
+                "candidate_models": ",".join(results.keys()),
+                "best_model": best_name,
+            }
+        )
 
         for model_name, metrics in results.items():
             with mlflow.start_run(run_name=model_name, nested=True):
                 mlflow.set_tag("model_family", model_name)
                 mlflow.log_param("params", metrics.get("params", {}))
-                mlflow.log_metrics({
-                    "rmse": float(metrics.get("RMSE", 0.0)),
-                    "mae": float(metrics.get("MAE", 0.0)),
-                    "r2": float(metrics.get("R2", 0.0)),
-                })
+                mlflow.log_metrics(
+                    {
+                        "rmse": float(metrics.get("RMSE", 0.0)),
+                        "mae": float(metrics.get("MAE", 0.0)),
+                        "r2": float(metrics.get("R2", 0.0)),
+                    }
+                )
 
         mlflow.log_params({f"best_{k}": v for k, v in best_params.items()})
         mlflow.log_metric("best_rmse", float(results[best_name].get("RMSE", 0.0)))
@@ -110,9 +114,7 @@ def log_training_run(
                 signature=signature,
                 input_example=X_train.head(3),
                 registered_model_name=(
-                    settings.mlflow_registered_model_name
-                    if settings.mlflow_auto_register
-                    else None
+                    settings.mlflow_registered_model_name if settings.mlflow_auto_register else None
                 ),
             )
         except Exception:

@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import threading
-from pathlib import Path
 from typing import Any
 
 import joblib
-import numpy as np
 import pandas as pd
 
 from app.config import get_settings
@@ -36,13 +34,11 @@ def load_model(force_reload: bool = False) -> tuple[Any, list[str]]:
 
         if not model_file.exists():
             raise FileNotFoundError(
-                f"Model not found: {model_file}. "
-                f"Run: python scripts/train.py"
+                f"Model not found: {model_file}. " f"Run: python scripts/train.py"
             )
         if not feature_file.exists():
             raise FileNotFoundError(
-                f"Feature columns not found: {feature_file}. "
-                f"Run: python scripts/train.py"
+                f"Feature columns not found: {feature_file}. " f"Run: python scripts/train.py"
             )
 
         _MODEL = joblib.load(model_file)
@@ -74,9 +70,7 @@ def predict_from_history(history_df: pd.DataFrame) -> dict:
     model, feature_columns = load_model()
 
     if len(history_df) < 10:
-        raise ValueError(
-            f"Need at least 10 cycles for feature engineering, got {len(history_df)}"
-        )
+        raise ValueError(f"Need at least 10 cycles for feature engineering, got {len(history_df)}")
 
     # Apply same preprocessing as training
     df = prepare_data(history_df, drop_flat=True)
@@ -86,8 +80,7 @@ def predict_from_history(history_df: pd.DataFrame) -> dict:
 
     if len(df) == 0:
         raise ValueError(
-            "Feature engineering produced 0 rows. "
-            "Provide more cycles (recommended: 15+)."
+            "Feature engineering produced 0 rows. " "Provide more cycles (recommended: 15+)."
         )
 
     # Check missing features

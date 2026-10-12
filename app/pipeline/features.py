@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.pipeline.schema import OP_SETTING_COLS, SENSOR_COLS
+from app.pipeline.schema import SENSOR_COLS
 
 
 def create_features(
@@ -33,12 +33,8 @@ def create_features(
     for window in windows:
         for col in sensor_cols:
             rolled = g[col].rolling(window)
-            new_cols[f"{col}_roll_mean_{window}"] = rolled.mean().reset_index(
-                level=0, drop=True
-            )
-            new_cols[f"{col}_roll_std_{window}"] = rolled.std().reset_index(
-                level=0, drop=True
-            )
+            new_cols[f"{col}_roll_mean_{window}"] = rolled.mean().reset_index(level=0, drop=True)
+            new_cols[f"{col}_roll_std_{window}"] = rolled.std().reset_index(level=0, drop=True)
 
     # Lags
     for lag in lags:

@@ -12,7 +12,6 @@ import pandas as pd
 import pandera as pa
 from pandera import Check, Column, DataFrameSchema
 
-
 # Sensor columns in NASA C-MAPSS FD001
 SENSOR_COLS = [f"sensor_{i}" for i in range(1, 22)]
 OP_SETTING_COLS = ["op_setting_1", "op_setting_2", "op_setting_3"]

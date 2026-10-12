@@ -1,7 +1,7 @@
 """FastAPI app for Turbofan RUL prediction."""
 
 import time
-import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pandas as pd
@@ -22,10 +22,25 @@ configure_logging()
 logger = get_logger("turbofan-rul")
 settings = get_settings()
 
+
+# --- Lifespan (modern FastAPI startup/shutdown) ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load model at startup (non-fatal if missing)."""
+    try:
+        load_model()
+        logger.info("model_loaded_at_startup")
+    except FileNotFoundError as exc:
+        logger.warning("model_not_found_at_startup", error=str(exc))
+    yield
+    logger.info("shutdown_complete")
+
+
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Predictive Maintenance: RUL Prediction for Turbofan Engines",
+    lifespan=lifespan,
 )
 
 app.add_middleware(RequestContextMiddleware)
@@ -33,7 +48,7 @@ app.add_middleware(RequestContextMiddleware)
 
 # --- Request models ---
 class PredictRequest(BaseModel):
-    """Predict from a single cycle's sensor values (needs ~10 cycles history)."""
+    """Predict from a single cycle's sensor values."""
 
     unit: int = Field(..., ge=1)
     cycle: int = Field(..., ge=1)
@@ -41,17 +56,6 @@ class PredictRequest(BaseModel):
     op_setting_2: float
     op_setting_3: float
     sensors: list[float] = Field(..., min_length=21, max_length=21)
-
-
-# --- Startup ---
-@app.on_event("startup")
-async def startup_load_model():
-    """Try to load the model at startup (non-fatal if missing)."""
-    try:
-        load_model()
-        logger.info("model_loaded_at_startup")
-    except FileNotFoundError as exc:
-        logger.warning("model_not_found_at_startup", error=str(exc))
 
 
 # --- Root ---
@@ -111,17 +115,10 @@ async def health_ready():
     }
 
 
-# --- Prediction: CSV upload (recommended) ---
+# --- Prediction: CSV upload ---
 @app.post("/api/predict/upload")
 async def predict_from_csv(file: UploadFile = File(...)):
-    """
-    Upload a CSV with one engine's history. Returns predicted RUL.
-
-    Expected format (space-separated, no header — NASA C-MAPSS style):
-        unit cycle op_setting_1 op_setting_2 op_setting_3 sensor_1 ... sensor_21
-
-    Also supports comma-separated with the same column order.
-    """
+    """Upload a CSV with one engine's history. Returns predicted RUL."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="Please select a file.")
 
@@ -133,13 +130,13 @@ async def predict_from_csv(file: UploadFile = File(...)):
 
     try:
         content = await file.read()
-        if not content:
-            raise HTTPException(status_code=400, detail="Empty file.")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Could not read file.")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Could not read file.") from exc
+
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file.")
 
     try:
-        # Try whitespace first (NASA format), then comma
         from io import BytesIO
 
         buffer = BytesIO(content)
@@ -151,7 +148,7 @@ async def predict_from_csv(file: UploadFile = File(...)):
             buffer.seek(0)
             df = pd.read_csv(buffer)
 
-        # If header was included, drop it
+        # Drop header row if present
         if df.iloc[0, 0] == "unit" or str(df.iloc[0, 0]).lower().startswith("unit"):
             df = df.iloc[1:].reset_index(drop=True)
 
@@ -174,7 +171,6 @@ async def predict_from_csv(file: UploadFile = File(...)):
             raise ValueError("Upload only one engine's history at a time.")
 
         result = await run_in_threadpool(predict_from_history, df)
-
         elapsed = time.perf_counter() - started
 
         # Metrics
@@ -191,15 +187,17 @@ async def predict_from_csv(file: UploadFile = File(...)):
 
         # Prediction log
         try:
-            log_prediction({
-                "endpoint": "upload",
-                "unit_id": int(df["unit"].iloc[0]),
-                "n_cycles": int(len(df)),
-                "predicted_rul": result["predicted_rul"],
-                "status": result["status"],
-                "model": result["model_used"],
-                "duration_ms": round(elapsed * 1000, 1),
-            })
+            log_prediction(
+                {
+                    "endpoint": "upload",
+                    "unit_id": int(df["unit"].iloc[0]),
+                    "n_cycles": int(len(df)),
+                    "predicted_rul": result["predicted_rul"],
+                    "status": result["status"],
+                    "model": result["model_used"],
+                    "duration_ms": round(elapsed * 1000, 1),
+                }
+            )
         except Exception:
             logger.exception("prediction_log_failed")
 
@@ -229,13 +227,10 @@ async def predict_from_csv(file: UploadFile = File(...)):
         ) from exc
 
 
-# --- Prediction: JSON (single cycle, requires history) ---
+# --- Prediction: JSON ---
 @app.post("/api/predict")
 async def predict_json(request: PredictRequest):
-    """
-    Predict from a single cycle. Requires the client to have built up
-    enough history — recommended to use /api/predict/upload instead.
-    """
+    """Predict from a single cycle (inflated for feature engineering)."""
     started = time.perf_counter()
 
     try:
@@ -251,11 +246,9 @@ async def predict_json(request: PredictRequest):
         for i, col in enumerate(SENSOR_COLS):
             row[col] = request.sensors[i]
 
-        df = pd.DataFrame([row])
-        df = df[BASE_COLS]
+        df = pd.DataFrame([row])[BASE_COLS]
 
-        # We can't build rolling features from 1 row. Inflate by copying.
-        # In production: client should upload history.
+        # Inflate to 10 cycles for feature engineering
         df = pd.concat([df] * 10, ignore_index=True)
         df["cycle"] = range(1, 11)
 
@@ -270,8 +263,7 @@ async def predict_json(request: PredictRequest):
 
         return {
             "success": True,
-            "note": "Single-row input inflated to 10 cycles for feature engineering. "
-                    "For accurate results, upload real history.",
+            "note": "Single-row input inflated to 10 cycles. For accurate results, upload history.",
             "duration_ms": round(elapsed * 1000, 1),
             **result,
         }
