@@ -23,3 +23,4 @@ sqlalchemy==2.0.36
 joblib==1.4.2
 dvc==3.59.0
 shap==0.46.0
+evidently==0.6.7

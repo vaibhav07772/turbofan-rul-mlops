@@ -1,6 +1,6 @@
 """Turbofan RUL — Streamlit Admin Dashboard.
 
-Monitors MLflow runs, live predictions, and model health.
+Monitors MLflow runs, live predictions, model health, drift, and explainability.
 
 Usage:
     streamlit run admin/app.py
@@ -28,6 +28,7 @@ MLFLOW_URI = f"sqlite:///{MLFLOW_DB.as_posix()}"
 PRED_LOG = ROOT / "data" / "logs" / "predictions.jsonl"
 MODEL_DIR = ROOT / "data" / "models"
 SHAP_PATH = MODEL_DIR / "shap_importance.json"
+DRIFT_PATH = MODEL_DIR / "drift_report.json"
 EXPERIMENT = "turbofan-rul"
 REGISTERED_MODEL = "turbofan-rul-model"
 
@@ -161,6 +162,19 @@ def load_shap() -> dict | None:
         return None
 
 
+@st.cache_data(ttl=30)
+def load_drift() -> dict | None:
+    """Load saved drift report summary."""
+    if not DRIFT_PATH.exists():
+        return None
+    try:
+        with DRIFT_PATH.open(encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("summary")
+    except Exception:
+        return None
+
+
 # --- Sidebar ---
 with st.sidebar:
     st.title("✈️ Turbofan RUL Admin")
@@ -169,7 +183,7 @@ with st.sidebar:
 
     page = st.radio(
         "Navigate",
-        ["Overview", "Experiments", "Predictions", "Model Health", "Explainability"],
+        ["Overview", "Experiments", "Predictions", "Model Health", "Explainability", "Drift"],
         label_visibility="collapsed",
     )
 
@@ -189,6 +203,7 @@ try:
     preds_df = load_predictions()
     info = model_info()
     shap_data = load_shap()
+    drift_data = load_drift()
     load_error = None
 except Exception as exc:
     runs_df = pd.DataFrame()
@@ -196,6 +211,7 @@ except Exception as exc:
     preds_df = pd.DataFrame()
     info = {}
     shap_data = None
+    drift_data = None
     load_error = f"{type(exc).__name__}: {exc}"
 
 if load_error:
@@ -455,6 +471,68 @@ elif page == "Explainability":
             )
         else:
             st.info("SHAP report is empty.")
+
+
+elif page == "Drift":
+    st.title("🌊 Data Drift Detection")
+
+    if drift_data is None:
+        st.warning("No drift report found.")
+        st.info("Run: `python scripts/compute_drift.py` to generate it.")
+    else:
+        st.caption(
+            f"Evidently AI drift analysis · "
+            f"Reference: {drift_data.get('n_reference', 0)} rows · "
+            f"Current: {drift_data.get('n_current', 0)} rows"
+        )
+
+        # Top metrics
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric(
+            "Dataset drift",
+            "YES ⚠️" if drift_data.get("dataset_drift") else "NO ✅",
+        )
+        c2.metric("Features drifted", drift_data.get("n_features_drifted", 0))
+        c3.metric("Features analyzed", drift_data.get("n_features_analyzed", 0))
+        c4.metric("Drift share", f"{drift_data.get('drift_share', 0) * 100:.1f}%")
+
+        st.divider()
+
+        drifted = drift_data.get("drifted_features", [])
+        if drifted:
+            df_drift = pd.DataFrame(drifted)
+
+            fig = px.bar(
+                df_drift.sort_values("drift_score", ascending=True),
+                x="drift_score",
+                y="feature",
+                orientation="h",
+                title="Top Drifted Features (higher = more drift)",
+                labels={"drift_score": "Drift score", "feature": "Feature"},
+                color="drift_score",
+                color_continuous_scale="Reds",
+            )
+            fig.update_layout(height=600)
+            st.plotly_chart(fig, use_container_width=True)
+
+            with st.expander("View as table"):
+                st.dataframe(df_drift, use_container_width=True, hide_index=True)
+
+            st.subheader("🔎 Interpretation")
+            st.markdown(
+                f"**{drift_data['n_features_drifted']} features** out of "
+                f"**{drift_data['n_features_analyzed']}** show statistically "
+                f"significant drift between training and current data."
+            )
+            if drift_data.get("dataset_drift"):
+                st.error(
+                    "⚠️ Overall dataset drift detected. "
+                    "Consider retraining the model with recent data."
+                )
+            else:
+                st.success("✅ No significant overall drift. Model is healthy.")
+        else:
+            st.success("✅ No drifted features detected.")
 
 
 st.sidebar.divider()
