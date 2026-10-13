@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -28,22 +29,35 @@ def setup_mlflow() -> None:
         return
 
     settings = get_settings()
+
+    # Remote auth (DagsHub, etc.) — must set env vars BEFORE set_tracking_uri
+    if settings.mlflow_tracking_username and settings.mlflow_tracking_password:
+        os.environ["MLFLOW_TRACKING_USERNAME"] = settings.mlflow_tracking_username
+        os.environ["MLFLOW_TRACKING_PASSWORD"] = settings.mlflow_tracking_password
+        logger.info("mlflow_auth_configured", username=settings.mlflow_tracking_username)
+
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
 
     client = mlflow.tracking.MlflowClient()
     if client.get_experiment_by_name(settings.mlflow_experiment_name) is None:
-        artifact_path = Path(settings.mlflow_artifact_location).resolve()
-        artifact_path.mkdir(parents=True, exist_ok=True)
-        client.create_experiment(
-            settings.mlflow_experiment_name,
-            artifact_location=artifact_path.as_uri(),
-        )
+        if settings.is_remote_mlflow:
+            # Remote (DagsHub) — let MLflow manage artifact location
+            client.create_experiment(settings.mlflow_experiment_name)
+        else:
+            # Local — explicit artifact path
+            artifact_path = Path(settings.mlflow_artifact_location).resolve()
+            artifact_path.mkdir(parents=True, exist_ok=True)
+            client.create_experiment(
+                settings.mlflow_experiment_name,
+                artifact_location=artifact_path.as_uri(),
+            )
 
     mlflow.set_experiment(settings.mlflow_experiment_name)
     logger.info(
         "mlflow_configured",
         tracking_uri=settings.mlflow_tracking_uri,
         experiment=settings.mlflow_experiment_name,
+        remote=settings.is_remote_mlflow,
     )
 
 

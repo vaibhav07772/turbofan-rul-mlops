@@ -21,13 +21,17 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = False
 
-    # MLflow (SQLite backend for cross-platform model registry)
+    # MLflow (SQLite local OR DagsHub remote)
     mlflow_enabled: bool = True
     mlflow_tracking_uri: str = "sqlite:///mlflow.db"
     mlflow_artifact_location: str = "./mlruns"
     mlflow_experiment_name: str = "turbofan-rul"
     mlflow_registered_model_name: str = "turbofan-rul-model"
     mlflow_auto_register: bool = True
+
+    # Remote MLflow auth (DagsHub) — leave empty for local SQLite
+    mlflow_tracking_username: str = ""
+    mlflow_tracking_password: str = ""
 
     # Uploads
     max_upload_bytes: int = 50 * 1024 * 1024  # 50 MB
@@ -56,6 +60,12 @@ class Settings(BaseSettings):
     @property
     def extension_set(self) -> set[str]:
         return {e.strip().lower() for e in self.allowed_extensions.split(",") if e.strip()}
+
+    @property
+    def is_remote_mlflow(self) -> bool:
+        """True if tracking URI is remote (not sqlite:/// or ./mlruns)."""
+        uri = self.mlflow_tracking_uri.lower()
+        return not (uri.startswith("sqlite://") or uri.startswith("file://") or uri.startswith("./"))
 
 
 @lru_cache
