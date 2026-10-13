@@ -33,7 +33,7 @@ htmlcov/
 *.log
 
 # === Model cache ===
-data/models/*.pkl
+# data/models/*.pkl
 
 # === MLflow ===
 mlruns/
@@ -53,3 +53,6 @@ data/processed/*.csv
 data/raw/*.txt
 data/raw/*.zip
 !data/raw/.gitkeep
+
+# Model cache (kept for cloud deploy)
+# data/models/*.pkl
