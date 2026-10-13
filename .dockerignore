@@ -7,7 +7,6 @@ __pycache__/
 .mypy_cache/
 .git/
 .github/
-admin/
 tests/
 scripts/
 data/raw/
@@ -23,3 +22,4 @@ mlflow.db
 coverage.xml
 .coverage
 htmlcov/
+mlflow-data/
